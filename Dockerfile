@@ -8,21 +8,22 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# 1) 安装 ta-lib C 库（从 GitHub 镜像源克隆，比 SourceForge 稳定）
+# 1) 安装 ta-lib C 库（从 GitHub Release tarball，比 SourceForge 稳定，且含预生成 configure）
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
         g++ \
         make \
-        git \
+        curl \
         ca-certificates \
         && rm -rf /var/lib/apt/lists/* \
-    && git clone --depth 1 --branch v0.4.0 https://github.com/TA-Lib/ta-lib.git /tmp/ta-lib \
-    && cd /tmp/ta-lib \
+    && curl -sL https://github.com/TA-Lib/ta-lib/releases/download/v0.4.0/ta-lib-0.4.0-src.tar.gz \
+       | tar xz -C /tmp \
+    && cd /tmp/ta-lib-0.4.0 \
     && ./configure --prefix=/usr >/dev/null \
     && make -j"$(nproc)" >/dev/null \
     && make install >/dev/null \
     && ldconfig \
-    && cd / && rm -rf /tmp/ta-lib
+    && cd / && rm -rf /tmp/ta-lib-0.4.0
 
 # 2) 安装 uv（构建期联网）
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
