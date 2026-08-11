@@ -8,23 +8,21 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# 1) 安装 ta-lib C 库（构建期一次性联网下载）
+# 1) 安装 ta-lib C 库（从 GitHub 镜像源克隆，比 SourceForge 稳定）
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc \
         g++ \
         make \
-        wget \
+        git \
         ca-certificates \
         && rm -rf /var/lib/apt/lists/* \
-    && cd /tmp \
-    && wget -q http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz \
-    && tar -xzf ta-lib-0.4.0-src.tar.gz \
-    && cd ta-lib \
+    && git clone --depth 1 --branch ta-lib-0.4.0 https://github.com/TA-Lib/ta-lib.git /tmp/ta-lib \
+    && cd /tmp/ta-lib \
     && ./configure --prefix=/usr >/dev/null \
     && make -j"$(nproc)" >/dev/null \
     && make install >/dev/null \
     && ldconfig \
-    && cd / && rm -rf /tmp/ta-lib /tmp/ta-lib-0.4.0-src.tar.gz
+    && cd / && rm -rf /tmp/ta-lib
 
 # 2) 安装 uv（构建期联网）
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
