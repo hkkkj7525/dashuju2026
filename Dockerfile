@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         ca-certificates \
         && rm -rf /var/lib/apt/lists/* \
-    && git clone --depth 1 --branch ta-lib-0.4.0 https://github.com/TA-Lib/ta-lib.git /tmp/ta-lib \
+    && git clone --depth 1 --branch v0.4.0 https://github.com/TA-Lib/ta-lib.git /tmp/ta-lib \
     && cd /tmp/ta-lib \
     && ./configure --prefix=/usr >/dev/null \
     && make -j"$(nproc)" >/dev/null \
