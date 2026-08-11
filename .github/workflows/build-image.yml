@@ -83,27 +83,13 @@ jobs:
           echo "=== Tar sha256 ==="
           sha256sum "${OUTPUT_TAR}" | tee "${OUTPUT_TAR}.sha256"
 
-      - name: Upload tar to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.0.0
-          name: "666这不阴 - Docker Image"
-          body: |
-            ## 构建结果
-            - **基础镜像**: ${BASE_IMAGE}
-            - **镜像**: ${IMAGE_NAME}:latest
-            - **Tar 文件**: ${OUTPUT_TAR}
-            - **大小**: $(du -h "${OUTPUT_TAR}" | cut -f1)
-            - **SHA256**: $(sha256sum "${OUTPUT_TAR}" | cut -d' ' -f1)
-            
-            下载后验证：`sha256sum 666这不阴.tar`
-          files: |
-            666这不阴.tar
-            666这不阴.tar.sha256
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Tag and push to GHCR
+        run: |
+          docker tag "${IMAGE_NAME}:latest" ghcr.io/${{ github.repository }}:latest
+          docker push ghcr.io/${{ github.repository }}:latest
 
       - name: Summary
         if: always()
@@ -119,7 +105,18 @@ jobs:
             SHA=$(sha256sum "${OUTPUT_TAR}" | cut -d' ' -f1)
             echo "- **SHA256**: ${SHA}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "请到 **Releases** 页面下载：https://github.com/${{ github.repository }}/releases/tag/v1.0.0" >> $GITHUB_STEP_SUMMARY
+            echo "### 拉取镜像（推荐，CDN 加速）" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "docker pull ghcr.io/${{ github.repository }}:latest" >> $GITHUB_STEP_SUMMARY
+            echo "docker tag ghcr.io/${{ github.repository }}:latest bdc2026:latest" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 导出为 tar（如需提交）" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "docker save -o 666这不阴.tar bdc2026:latest" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ 构建失败，请查看上方日志" >> $GITHUB_STEP_SUMMARY
           fi
