@@ -18,6 +18,15 @@ dependencies = [
     "tqdm>=4.67.1",
 ]
 
-# 比赛方机器有 RTX 4060 时，可在构建时使用 CUDA 基础镜像并加 --extra-index-url；
-# 默认从 PyPI 拉 CPU 版 torch（约 200MB），保证轻量、跨平台。
+# 默认从 PyPI 拉 torch（约 200MB），保证轻量、跨平台（Linux/Windows）。
+# 若需 GPU，可改用以下 pytorch-cu128 索引（需先在 Dockerfile 中使用 nvidia/cuda 基础镜像）：
+# [[tool.uv.index]]
+# name = "pytorch-cu128"
+# url = "https://download.pytorch.org/whl/cu128"
+# explicit = true
+# [tool.uv.sources]
+# torch = [
+#     { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+#     { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },
+# ]
 
