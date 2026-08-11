@@ -1,0 +1,26 @@
+__pycache__
+*.pyc
+*.pyo
+.git
+.venv
+.vscode
+.idea
+.DS_Store
+*.log
+test/output
+test/results_output
+*.tmp
+*.swp
+# data / output / temp 在 docker-compose 中挂载，镜像内不包含
+data
+output
+temp
+test
+GUIDE.md
+get_stock_data.py
+get_stock_data_illustration.txt
+.dockerignore
+.gitignore
+.python-version
+*.tar
+*.iml

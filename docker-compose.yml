@@ -1,0 +1,35 @@
+# 赛事方要求的 docker-compose.yml
+# 镜像加载方式：docker load -i 队伍名称.tar
+# 启动方式：   docker compose up
+# 容器名为 app，工作目录 /app，code/model/init.sh/train.sh 来自镜像内
+# data / output / temp 为挂载卷，保留在宿主机
+services:
+  app:
+    image: bdc2026:latest
+    container_name: bdc2026_app
+    pull_policy: never
+    working_dir: /app
+    # 挂载数据 / 输出 / 中间结果；code 与 model 来自镜像内部
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./temp:/app/temp
+    # 默认进入睡眠，便于赛事方通过 docker exec 执行
+    command: ["sleep", "infinity"]
+    # 资源限制：与官方要求一致
+    mem_limit: 16g
+    memswap_limit: 16g
+    cpus: 10.0
+    # GPU 支持（用 NVIDIA Container Toolkit 时生效）
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    privileged: true

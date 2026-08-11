@@ -1,0 +1,112 @@
+name: Build bdc2026 Docker Image
+
+# 触发条件：
+#   1) 推送到 main / master 分支
+#   2) 手动从 Actions 页面触发（workflow_dispatch）
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+# 防止同时多个构建（节约 runner 时间）
+concurrency:
+  group: build-bdc2026
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: bdc2026
+  OUTPUT_TAR: 666这不阴.tar
+
+jobs:
+  build:
+    # 官方 Linux runner，无 GPU（构建过程不需要 GPU 编译）
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          echo "=== 清理前空间 ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af || true
+          echo "=== 清理后空间 ==="
+          df -h
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:v0.16.0
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build bdc2026 image (linux/amd64, nvidia/cuda base)
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg IMAGE_NAME=nvidia/cuda \
+            --cache-from type=local,src=/tmp/.buildx-cache \
+            --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            --tag ${IMAGE_NAME}:latest \
+            --load \
+            .
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: Save image to tar
+        run: |
+          docker save -o "${OUTPUT_TAR}" "${IMAGE_NAME}:latest"
+          echo "=== Tar size ==="
+          ls -lh "${OUTPUT_TAR}"
+          echo "=== Tar sha256 ==="
+          sha256sum "${OUTPUT_TAR}" | tee "${OUTPUT_TAR}.sha256"
+
+      - name: Quick smoke test (verify image can start)
+        run: |
+          echo "=== 测试镜像能否启动 ==="
+          docker images | grep bdc2026
+          # 启动容器跑 init.sh，验证基础环境
+          docker run --rm "${IMAGE_NAME}:latest" bash -c "python --version && python -c 'import torch; print(torch.__version__, \"CUDA available:\", torch.cuda.is_available())'"
+
+      - name: Upload tar as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdc2026-tar
+          path: |
+            666这不阴.tar
+            666这不阴.tar.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 构建结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f "${OUTPUT_TAR}" ]; then
+            echo "- **镜像**: ${IMAGE_NAME}:latest" >> $GITHUB_STEP_SUMMARY
+            echo "- **Tar 文件**: ${OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
+            SIZE=$(du -h "${OUTPUT_TAR}" | cut -f1)
+            echo "- **大小**: ${SIZE}" >> $GITHUB_STEP_SUMMARY
+            SHA=$(sha256sum "${OUTPUT_TAR}" | cut -d' ' -f1)
+            echo "- **SHA256**: ${SHA}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "请到 Actions 页面底部 Artifacts 区域下载 \`bdc2026-tar\`。" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ 构建失败，请查看上方日志" >> $GITHUB_STEP_SUMMARY
+          fi
