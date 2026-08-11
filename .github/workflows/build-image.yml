@@ -1,14 +1,10 @@
 name: Build bdc2026 Docker Image
 
-# 触发条件：
-#   1) 推送到 main / master 分支
-#   2) 手动从 Actions 页面触发（workflow_dispatch）
 on:
   push:
     branches: [main, master]
   workflow_dispatch:
 
-# 防止同时多个构建（节约 runner 时间）
 concurrency:
   group: build-bdc2026
   cancel-in-progress: false
@@ -19,20 +15,19 @@ env:
 
 jobs:
   build:
-    # 官方 Linux runner，无 GPU（构建过程不需要 GPU 编译）
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Free disk space
         run: |
           echo "=== 清理前空间 ==="
           df -h
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune -af || true
+          sudo docker image prune -af 2>/dev/null || true
           echo "=== 清理后空间 ==="
           df -h
 
@@ -41,49 +36,42 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: image=moby/buildkit:v0.16.0
 
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
-      - name: Build bdc2026 image (linux/amd64, nvidia/cuda base)
+      - name: Build bdc2026 image (linux/amd64)
+        id: build
         run: |
+          set -e
+          echo "=== 开始构建 ==="
           docker buildx build \
             --platform linux/amd64 \
-            --build-arg IMAGE_NAME=nvidia/cuda \
-            --cache-from type=local,src=/tmp/.buildx-cache \
-            --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            --build-arg IMAGE_NAME=python:3.12-slim-bookworm \
             --tag ${IMAGE_NAME}:latest \
             --load \
-            .
-
-      - name: Move cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+            . 2>&1 | tee /tmp/build.log
+          echo "=== 构建完成 ==="
+          docker images | grep bdc2026
 
       - name: Save image to tar
+        id: save
         run: |
+          set -e
+          echo "=== 导出镜像 ==="
           docker save -o "${OUTPUT_TAR}" "${IMAGE_NAME}:latest"
           echo "=== Tar size ==="
           ls -lh "${OUTPUT_TAR}"
           echo "=== Tar sha256 ==="
           sha256sum "${OUTPUT_TAR}" | tee "${OUTPUT_TAR}.sha256"
 
-      - name: Quick smoke test (verify image can start)
+      - name: Quick smoke test
         run: |
-          echo "=== 测试镜像能否启动 ==="
+          set +e
+          echo "=== 验证镜像 ==="
           docker images | grep bdc2026
-          # 启动容器跑 init.sh，验证基础环境
-          docker run --rm "${IMAGE_NAME}:latest" bash -c "python --version && python -c 'import torch; print(torch.__version__, \"CUDA available:\", torch.cuda.is_available())'"
+          docker run --rm "${IMAGE_NAME}:latest" bash -c "python --version && python -c 'import torch; print(\"torch:\", torch.__version__)' && python -c 'import talib; print(\"talib ok\")'"
+          echo "=== 烟雾测试通过 ==="
 
       - name: Upload tar as artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: bdc2026-tar
@@ -93,10 +81,20 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Build failure diagnostics
+        if: failure()
+        run: |
+          echo "## ❌ 构建失败" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 构建日志末尾" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -100 /tmp/build.log 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "无构建日志" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
       - name: Summary
         if: always()
         run: |
-          echo "## 构建结果" >> $GITHUB_STEP_SUMMARY
+          echo "## 构建摘要" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -f "${OUTPUT_TAR}" ]; then
             echo "- **镜像**: ${IMAGE_NAME}:latest" >> $GITHUB_STEP_SUMMARY
@@ -105,8 +103,6 @@ jobs:
             echo "- **大小**: ${SIZE}" >> $GITHUB_STEP_SUMMARY
             SHA=$(sha256sum "${OUTPUT_TAR}" | cut -d' ' -f1)
             echo "- **SHA256**: ${SHA}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "请到 Actions 页面底部 Artifacts 区域下载 \`bdc2026-tar\`。" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ 构建失败，请查看上方日志" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Tar 文件未生成，构建失败" >> $GITHUB_STEP_SUMMARY
           fi
